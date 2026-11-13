@@ -8,6 +8,7 @@
 #endif
 #include "resourceManager.h"
 #include "def.h"
+#include "nextuiFont.h"
 #include "screen.h"
 #include "sdlutils.h"
 
@@ -54,10 +55,29 @@ std::vector<TTF_Font *> LoadFonts(bool low_dpi) {
     const std::size_t len = low_dpi ? kLowDpiFontsLen : kFontsLen;
 
     std::vector<TTF_Font *> fonts;
-    fonts.reserve(len);
+    fonts.reserve(len + 1);
+
+    // Prefer the font chosen in NextUI-CN Settings; bundled fonts stay as fallbacks.
+    const std::string system_font = nextui::ResolveSystemFontPath();
+    const int size0 = (len > 0 ? specs[0].size : 8) * config().disp_ppu_y;
+    if (!system_font.empty()) {
+        auto *font = SDL_utils::loadFont(system_font, size0);
+        if (font != nullptr) {
+            const int style = nextui::ResolveSystemFontStyle();
+            if (style != 0) {
+                TTF_SetFontStyle(font, style);
+            }
+            fonts.push_back(font);
+            std::cerr << "Using NextUI system font: " << system_font << std::endl;
+        }
+    }
+
     for (std::size_t i = 0; i < len; ++i) {
-        const std::string &path = specs[i].path;
-        auto *font = SDL_utils::loadFont(path.front() == '/' ? path : ResPath(path), specs[i].size * config().disp_ppu_y);
+        const std::string path = specs[i].path;
+        if (path.empty()) continue;
+        const std::string full = path.front() == '/' ? path : ResPath(path);
+        if (!system_font.empty() && full == system_font) continue;
+        auto *font = SDL_utils::loadFont(full, specs[i].size * config().disp_ppu_y);
         if (font != nullptr) fonts.push_back(font);
     }
     if (fonts.empty()) {
